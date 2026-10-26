@@ -1,0 +1,22 @@
+      Connection Information
+      Parameter       |   Value   
+----------------------+-----------
+ Database             | postgres
+ Client User          | postgres
+ Host                 | localhost
+ Host Address         | ::1
+ Server Port          | 5432
+ Options              | 
+ Protocol Version     | 3.0
+ Password Used        | true
+ GSSAPI Authenticated | false
+ Backend PID          | 260
+ SSL Connection       | false
+ Superuser            | on
+ Hot Standby          | off
+(13 rows)
+
+ ssl | version | cipher 
+-----+---------+--------
+ f   |         | 
+(1 row)

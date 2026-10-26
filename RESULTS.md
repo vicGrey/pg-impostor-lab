@@ -40,28 +40,28 @@ Without a CA certificate provided, `sslmode=require` connected to **every single
 
 1. **`ssl=on` allows TLS but does not force it:**
    Enabling SSL on the database server does not prevent clients from sending plaintext. With standard access rules, `sslmode=disable` established a session in unencrypted plaintext (`pg_stat_ssl.ssl = f`).
-   *Evidence:* [real-disable-without-root.txt](file:///home/viktor/pg-impostor-lab/evidence/phase1/real-disable-without-root.txt)
+   *Evidence:* [real-disable-without-root.txt](evidence/phase1/real-disable-without-root.txt)
 
 2. **`require` encrypts but trusts anyone:**
    In its standard configuration (no CA certificate mounted), `sslmode=require` encrypts the connection but blindly accepts any certificate presented by the server. It connected to all three impostor servers without warning.
-   *Evidence:* [impostor-wrong-require-without-root.txt](file:///home/viktor/pg-impostor-lab/evidence/phase1/impostor-wrong-require-without-root.txt), [impostor-correct-require-without-root.txt](file:///home/viktor/pg-impostor-lab/evidence/phase1/impostor-correct-require-without-root.txt), [impostor-sameca-require-without-root.txt](file:///home/viktor/pg-impostor-lab/evidence/phase1/impostor-sameca-require-without-root.txt)
+   *Evidence:* [impostor-wrong-require-without-root.txt](evidence/phase1/impostor-wrong-require-without-root.txt), [impostor-correct-require-without-root.txt](evidence/phase1/impostor-correct-require-without-root.txt), [impostor-sameca-require-without-root.txt](evidence/phase1/impostor-sameca-require-without-root.txt)
 
 3. **Providing a CA file quietly upgrades `require`:**
    When an application specifies `sslrootcert`, libpq silently validates the CA signature even if the mode is only `sslmode=require`. Consequently, `require` refused both CA-B impostors when the CA file was present (`SSL error: certificate verify failed`).
-   *Evidence:* [impostor-wrong-require-with-root.txt](file:///home/viktor/pg-impostor-lab/evidence/phase1/impostor-wrong-require-with-root.txt), [impostor-correct-require-with-root.txt](file:///home/viktor/pg-impostor-lab/evidence/phase1/impostor-correct-require-with-root.txt)
+   *Evidence:* [impostor-wrong-require-with-root.txt](evidence/phase1/impostor-wrong-require-with-root.txt), [impostor-correct-require-with-root.txt](evidence/phase1/impostor-correct-require-with-root.txt)
 
 4. **`verify-ca` blocks untrusted CAs, but NOT same-CA impostors:**
    `verify-ca` successfully rejected certificates from CA-B, but it completely failed to detect `impostor-sameca`. Because the certificate was stamped by the trusted CA-A, `verify-ca` established a connection despite the wrong hostname.
-   *Evidence:* [impostor-sameca-verify-ca-with-root.txt](file:///home/viktor/pg-impostor-lab/evidence/phase1/impostor-sameca-verify-ca-with-root.txt)
+   *Evidence:* [impostor-sameca-verify-ca-with-root.txt](evidence/phase1/impostor-sameca-verify-ca-with-root.txt)
 
 5. **Only `verify-full` stopped every impostor:**
    `verify-full` was the only mode that prevented connection to `impostor-sameca`. In addition to verifying the CA chain, it strictly enforced hostname matching, catching the spoofed endpoint with:
    `psql: error: server certificate for "postgres-wrong" does not match host name "localhost"`
-   *Evidence:* [impostor-sameca-verify-full-with-root.txt](file:///home/viktor/pg-impostor-lab/evidence/phase1/impostor-sameca-verify-full-with-root.txt)
+   *Evidence:* [impostor-sameca-verify-full-with-root.txt](evidence/phase1/impostor-sameca-verify-full-with-root.txt)
 
 6. **Verification modes fail safe when no CA file is found:**
    Both `verify-ca` and `verify-full` refused to connect when no CA certificate was configured, failing closed with `root certificate file ... does not exist` rather than falling back to unverified encryption.
-   *Evidence:* [real-verify-ca-without-root.txt](file:///home/viktor/pg-impostor-lab/evidence/phase1/real-verify-ca-without-root.txt), [real-verify-full-without-root.txt](file:///home/viktor/pg-impostor-lab/evidence/phase1/real-verify-full-without-root.txt)
+   *Evidence:* [real-verify-ca-without-root.txt](evidence/phase1/real-verify-ca-without-root.txt), [real-verify-full-without-root.txt](evidence/phase1/real-verify-full-without-root.txt)
 
 ---
 

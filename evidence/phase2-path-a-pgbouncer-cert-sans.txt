@@ -1,0 +1,4 @@
+subject=CN=cluster1-pgbouncer.pg-lab.svc.cluster.local
+issuer=CN=postgres-operator-ca
+X509v3 Subject Alternative Name: 
+    DNS:cluster1-pgbouncer.pg-lab.svc.cluster.local, DNS:cluster1-pgbouncer.pg-lab.svc, DNS:cluster1-pgbouncer.pg-lab, DNS:cluster1-pgbouncer

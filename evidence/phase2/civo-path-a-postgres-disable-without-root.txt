@@ -1,0 +1,1 @@
+psql: error: connection to server at "127.0.0.1", port 5434 failed: FATAL:  no pg_hba.conf entry for host "127.0.0.1", user "cluster1", database "cluster1", no encryption

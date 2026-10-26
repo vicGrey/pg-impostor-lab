@@ -38,6 +38,12 @@
 ### 4. Cross-namespace CA distribution
 - **Expectation (hypothesis):** Percona provides no automated mechanism to sync `root.crt` to client pods running in other namespaces. Developers will either have to manually copy the Secret into their application namespace (risking copying the private key along with it) or downgrade their client to `sslmode=require` to bypass certificate mounting entirely.
 
+### Outcomes & Experimental Discoveries (Path A)
+1. **CA Secret Leaks Private Key (Confirmed):** `cluster1-cluster-ca-cert` contains both `root.crt` AND `root.key`. The CA signing key is stored directly in Kubernetes Secret storage.
+2. **Double Lockdown on Plaintext (Surprise):** Unlike raw Docker PostgreSQL where `sslmode=disable` succeeded in plaintext, Percona locks down both layers by default: PgBouncer rejects plaintext (`FATAL: SSL required`), and PostgreSQL's default `pg_hba.conf` enforces encryption (`FATAL: no pg_hba.conf entry ... no encryption`).
+3. **Internal SANs Complete, External/Localhost Excluded (Confirmed):** The operator mints SANs for all 4 in-cluster DNS variants (`short`, `name.ns`, `name.ns.svc`, `FQDN`). However, dialing `host=localhost` via port-forwarding failed with `verify-full`, proving strict hostname enforcement.
+4. **`require` Without Root CA Blindly Connects (Confirmed):** Even with the server-side double lockdown, a client using `sslmode=require` without a root CA connects blindly, remaining susceptible to MITM.
+
 ## Phase 3: Impostor Tests
 
 ## Phase 4: Certificate Policy Tests

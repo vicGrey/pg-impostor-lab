@@ -1,0 +1,1 @@
+psql: error: connection to server at "localhost" (::1), port 5434 failed: server certificate for "cluster1-primary.pg-lab.svc.cluster.local" (and 7 other names) does not match host name "localhost"

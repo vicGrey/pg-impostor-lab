@@ -44,6 +44,18 @@ for mode in "${MODES[@]}"; do
       CONN_STR="${CONN_STR} sslrootcert=${CA_FILE}"
     fi
 
+    # If testing against a forwarded local port, ensure port is actively listening
+    if [ -n "${HOSTADDR}" ] && [ "${HOSTADDR}" == "127.0.0.1" ]; then
+      WAIT_SECS=0
+      while [ -z "$(ss -tlH "sport = :${PORT}" 2>/dev/null)" ]; do
+        sleep 0.3
+        WAIT_SECS=$((WAIT_SECS + 1))
+        if [ ${WAIT_SECS} -ge 20 ]; then
+          break
+        fi
+      done
+    fi
+
     # Run psql command
     OUTPUT=$(PGPASSWORD="${DB_PASS}" psql "${CONN_STR}" \
       -c "\conninfo" \
@@ -71,8 +83,11 @@ for mode in "${MODES[@]}"; do
       fi
       printf "%-12s | %-15s | \033[0;31m%-10s\033[0m | %s\n" "${mode}" "${root_opt}" "${STATUS}" "${ERR_LINE}"
     fi
+
+    # Small sleep so forwarded tunnel sockets can cycle cleanly
+    sleep 1.2
   done
 done
 
 echo "======================================================================"
-echo "Evidence saved to evidence/phase1/${LABEL}-*.txt"
+echo "Evidence saved to ${EVIDENCE_DIR}/${LABEL}-*.txt"

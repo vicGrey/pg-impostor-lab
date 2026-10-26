@@ -46,6 +46,13 @@
 
 ## Phase 3: Impostor Tests
 
+### Predictions
+- **Hypothesis:** If an attacker extracts the operator's CA private key from `cluster1-cluster-ca-cert`, they can mint a certificate with the real cluster hostname (`cluster1-primary.pg-lab.svc.cluster.local`). A client configured with `sslmode=verify-full` and the trusted `civo-ca.crt` will be completely fooled, because both the cryptographic signature and the SAN match the client's expectations.
+
+### Outcomes & Experimental Confirmation
+- **Confirmed:** `psql` configured with `sslmode=verify-full` and `civo-ca.crt` connected over TLSv1.3 to the impostor server without any warning.
+- The "correct-hostname gap" left open in Phase 1 is fully realized: `verify-full` protects against name spoofing and untrusted CAs, but cannot protect against key compromise at the CA level when the private key is co-located with the workload.
+
 ## Phase 4: Certificate Policy Tests
 
 ## Phase 5: Custom Hostnames and the Fix

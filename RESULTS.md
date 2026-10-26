@@ -117,7 +117,39 @@ The full 12-row connection matrix was executed against both PgBouncer and Postgr
 
 ### Path B: cert-manager (Pending)
 
-## Phase 3: Impostor Tests
+## Phase 3: Impostor Tests (The Correct-Hostname Gap)
+
+### 1. Threat Model & Scope
+> [!IMPORTANT]
+> **Framing:** This finding assumes an attacker who possesses read permissions to Kubernetes Secrets within the database namespace (or has compromised an application in that namespace), **not a remote network break**. Because Percona's built-in PKI stores the CA private key (`root.key`) directly inside the namespace Secret `cluster1-cluster-ca-cert`, anyone with Secret read access obtains the cluster's root signing authority.
+
+### 2. The Attack Simulation
+1. **Key Extraction:** The operator's CA private key (`root.key`) was extracted from Secret `cluster1-cluster-ca-cert`.
+2. **Targeted Certificate Minting:** A new server certificate was minted using the extracted CA key, stamped with the legitimate cluster primary hostname as a Subject Alternative Name:
+   - CN / SAN: `cluster1-primary.pg-lab.svc.cluster.local`
+   - Issuer: `CN=postgres-operator-ca`
+   - *Evidence:* [impostor-cert-details.txt](evidence/phase3/impostor-cert-details.txt)
+3. **Impostor Deployment:** An isolated database server was started presenting this certificate.
+
+### 3. Client Behavior Under Strict `verify-full`
+A client was configured with maximum TLS security:
+- `sslmode=verify-full`
+- `sslrootcert=civo-ca.crt` (the legitimate public CA certificate)
+- `host=cluster1-primary.pg-lab.svc.cluster.local`
+
+**Result: FOOLED (COMPROMISED)**
+- The client validated the CA signature against `civo-ca.crt` -> **Passed**.
+- The client verified that the server certificate matched the target hostname -> **Passed**.
+- An encrypted TLSv1.3 session was established with the impostor server without any warning or error.
+- *Evidence:* [impostor-verify-full-conninfo.txt](evidence/phase3/impostor-verify-full-conninfo.txt)
+
+### 4. Key Takeaway & Architecture Implication
+In Phase 1, `verify-full` was sufficient to reject all three impostors because the attacker lacked the trusted CA private key.
+
+However, in Path A, **`verify-full` completely fails to protect the client** once the namespace Secret is read. The client-side TLS handshake cannot distinguish between the legitimate database and an impostor server minted with the same cluster CA.
+
+> [!NOTE]
+> **Path B Implication:** Switching to `cert-manager` only solves this problem if the CA signing key is stored **outside** the application/database namespace (e.g. via a `ClusterIssuer` backed by HashiCorp Vault or a dedicated root namespace). If cert-manager is configured with an in-namespace `Issuer`, the CA private key remains in an in-namespace Secret, leaving the attack surface unchanged.
 
 ## Phase 4: Certificate Policy Tests
 

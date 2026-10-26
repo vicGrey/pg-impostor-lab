@@ -1,0 +1,35 @@
+# TLS private keys (never commit private keys to version control)
+# Note: Public certificates must be named .crt so they are clearly distinguished from keys
+*.key
+*.pem
+
+# Other private key containers (PKCS#12 format commonly used by Java/browsers)
+*.p12
+*.pfx
+
+# OpenSSL serial files generated during CA signing
+*.srl
+
+# Environment variables and raw secret exports
+.env
+*.env
+*.secret
+*.secret.yaml
+*.secret.json
+
+# Cluster admin credentials (Civo downloads and local kubeconfig caches)
+kubeconfig*
+*.kubeconfig
+.kube/
+
+# Generated local certificate working directory
+docker/certs/
+
+# OS and editor temporary files
+.DS_Store
+*~
+*.swp
+
+# Project planning and agent instructions
+PLAN.md
+.agents/

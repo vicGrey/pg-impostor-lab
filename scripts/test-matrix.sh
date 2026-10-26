@@ -11,12 +11,20 @@ PORT="${3:-5432}"
 CA_FILE="${4:-docker/certs/ca-a.crt}"
 HOSTADDR="${5:-}"
 
-mkdir -p evidence/phase1
+DB_USER="${PGUSER:-postgres}"
+DB_NAME="${PGDATABASE:-postgres}"
+DB_PASS="${PGPASSWORD:-postgres}"
+
+EVIDENCE_DIR="evidence/phase1"
+if [[ "${LABEL}" =~ (phase2|civo) ]]; then
+  EVIDENCE_DIR="evidence/phase2"
+fi
+mkdir -p "${EVIDENCE_DIR}"
 
 echo "======================================================================"
 echo " Running Test Matrix for: ${LABEL}"
-echo " Host: ${HOST} | Port: ${PORT} | CA: ${CA_FILE} | HostAddr: ${HOSTADDR:-none}"
-echo "======================================================================"
+echo " Host: ${HOST} | Port: ${PORT} | User: ${DB_USER} | DB: ${DB_NAME} | CA: ${CA_FILE} | HostAddr: ${HOSTADDR:-none}"
+echo "========================================================================"
 printf "%-12s | %-15s | %-10s | %s\n" "SSLMODE" "ROOT.CRT" "STATUS" "DETAILS / ERROR"
 echo "----------------------------------------------------------------------"
 
@@ -25,10 +33,10 @@ ROOT_OPTIONS=("without-root" "with-root")
 
 for mode in "${MODES[@]}"; do
   for root_opt in "${ROOT_OPTIONS[@]}"; do
-    EVIDENCE_FILE="evidence/phase1/${LABEL}-${mode}-${root_opt}.txt"
+    EVIDENCE_FILE="${EVIDENCE_DIR}/${LABEL}-${mode}-${root_opt}.txt"
     
     # Build connection string
-    CONN_STR="host=${HOST} port=${PORT} user=postgres dbname=postgres sslmode=${mode}"
+    CONN_STR="host=${HOST} port=${PORT} user=${DB_USER} dbname=${DB_NAME} sslmode=${mode}"
     if [ -n "${HOSTADDR}" ]; then
       CONN_STR="${CONN_STR} hostaddr=${HOSTADDR}"
     fi
@@ -37,7 +45,7 @@ for mode in "${MODES[@]}"; do
     fi
 
     # Run psql command
-    OUTPUT=$(PGPASSWORD=postgres psql "${CONN_STR}" \
+    OUTPUT=$(PGPASSWORD="${DB_PASS}" psql "${CONN_STR}" \
       -c "\conninfo" \
       -c "SELECT ssl, version, cipher FROM pg_stat_ssl WHERE pid = pg_backend_pid();" 2>&1)
     EXIT_CODE=$?

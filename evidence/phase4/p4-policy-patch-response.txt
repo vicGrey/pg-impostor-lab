@@ -1,0 +1,2 @@
+$ kubectl patch pg cluster1 -n pg-lab --type='merge' -p '{"spec":{"tls":{"certManagementPolicy":"userProvidedOnly"}}}'
+perconapgcluster.pgv2.percona.com/cluster1 patched

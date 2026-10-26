@@ -182,4 +182,32 @@ However, in Path A, **`verify-full` completely fails to protect the client** onc
 
 ## Phase 4: Certificate Policy Tests
 
+### 1. Live Policy Mutation (`kubectl patch`)
+- **Initial Patch to `userProvidedOnly`:** When `spec.tls` was previously unset, patching `certManagementPolicy: userProvidedOnly` succeeded at the API server level. However, the Percona Operator immediately entered an error loop:
+  `ERROR Reconciler error ... parse certificate in user-provided root CA secret "cluster1-cluster-ca-cert": not a PEM-encoded certificate`
+  *Evidence:* [p4-policy-patch-response.txt](evidence/phase4/p4-policy-patch-response.txt), [p4-policy-patch-operator-error.txt](evidence/phase4/p4-policy-patch-operator-error.txt)
+- **Immutability Enforcement:** Attempting to mutate `certManagementPolicy` back to `auto` was strictly rejected by the Kubernetes API server via CEL validation:
+  `The PerconaPGCluster "cluster1" is invalid: spec.tls.certManagementPolicy: Invalid value: "auto": certManagementPolicy is immutable`
+  *Evidence:* [p4-policy-patch-immutable-rejected.txt](evidence/phase4/p4-policy-patch-immutable-rejected.txt)
+- **JSON Patch Recovery:** Removing `/spec/tls` entirely via JSON patch bypassed the validation rule and allowed the operator to recover cleanly without recreating the cluster.
+
+### 2. Leaf Secret Deletion (`cluster1-cluster-cert`)
+- **Behavior:** Deleting the leaf certificate Secret caused `cert-manager` to immediately detect the missing Secret and reissue the certificate from the existing `cluster1-tls-issuer` in under 16 seconds.
+- **Serial Numbers:** The leaf certificate received a new serial (`7B74AD9C...` -> `72FAD417...`).
+- **Root CA Invariance:** The root CA Secret remained completely unchanged (`D946968CFA55F1E438D935E42313E667`), meaning existing clients experienced zero disruption.
+- *Evidence:* [p4-delete-leaf-cert-manager.txt](evidence/phase4/p4-delete-leaf-cert-manager.txt)
+
+### 3. Root CA Deletion & Rotation
+- **Behavior:** Deleting the root CA Secret (`cluster1-cluster-ca-cert`) caused cert-manager's self-signed issuer to mint a brand new root CA authority (`serial=D0DF64E7...`).
+- **Delayed Leaf Rotation:** cert-manager did NOT automatically scan or immediately reissue downstream leaf certificates upon CA deletion; existing leaf certificates remained active until explicitly deleted or renewed.
+- *Evidence:* [p4-delete-ca-cert-manager.txt](evidence/phase4/p4-delete-ca-cert-manager.txt)
+
+### 4. Client Impact of CA Rotation
+Once the leaf certificate was reissued under the new CA:
+- **`sslmode=verify-full` Broke:** Clients holding the previously trusted root CA failed immediately:
+  `psql: error: connection to server at "127.0.0.1", port 5433 failed: SSL error: certificate verify failed`
+  *Evidence:* [p4-ca-rotation-verify-full-breaks.txt](evidence/phase4/p4-ca-rotation-verify-full-breaks.txt)
+- **`sslmode=require` Blindly Succeeded:** Clients with unauthenticated TLS connected seamlessly over TLSv1.3, unaware that the certificate authority had changed.
+  *Evidence:* [p4-ca-rotation-require-blindly-connects.txt](evidence/phase4/p4-ca-rotation-require-blindly-connects.txt)
+
 ## Phase 5: Custom Hostnames and the Fix

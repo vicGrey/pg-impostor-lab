@@ -60,4 +60,14 @@
 
 ## Phase 4: Certificate Policy Tests
 
+### Predictions
+- **Policy Mutation:** Changing `certManagementPolicy` on a live cluster will be rejected as immutable (`self == oldSelf`).
+- **Leaf Secret Deletion (cert-manager):** Deleting `cluster1-cluster-cert` will cause cert-manager to reissue the leaf certificate with a new serial number while leaving the CA unchanged.
+- **Root CA Deletion & Rotation:** Deleting `cluster1-cluster-ca-cert` will rotate the CA. Clients with `sslmode=verify-full` holding the old CA will break (`certificate verify failed`), while clients with `sslmode=require` will continue connecting.
+
+### Outcomes & Experimental Confirmation
+1. **CEL Immutability Enforced (Confirmed):** Once written to spec, `certManagementPolicy` cannot be changed from `userProvidedOnly` back to `auto` (`certManagementPolicy is immutable`). Removing the path via JSON patch allows recovery.
+2. **Leaf Reissued, CA Untouched (Confirmed):** Deleting the leaf secret triggered reissuance with new serial `72FAD417...`, keeping root CA `D946968C...` untouched.
+3. **CA Rotation Breaks `verify-full`, Leaves `require` Blindly Connecting (Confirmed):** Rotating the root CA caused `verify-full` connections holding the previous CA to fail with `SSL error: certificate verify failed`, while `sslmode=require` continued connecting over TLSv1.3 without warning.
+
 ## Phase 5: Custom Hostnames and the Fix

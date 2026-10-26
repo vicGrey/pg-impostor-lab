@@ -1,0 +1,14 @@
+=== Pre-Deletion Leaf Cert Serial ===
+serial=7B74AD9C35CB15734C12BB26A0AA4B79
+
+=== New Leaf Cert Serial & Issuer (Post-Deletion) ===
+serial=72FAD417BAA36665F8EEFAA554E088B5
+issuer=CN=cluster1-ca
+
+=== Current CA Cert Serial in Cluster ===
+serial=D946968CFA55F1E438D935E42313E667
+
+=== Saved civo-ca-path-b.crt Serial ===
+serial=D946968CFA55F1E438D935E42313E667
+
+Result: Leaf certificate successfully reissued by cert-manager with new serial number; root CA remained completely unchanged.

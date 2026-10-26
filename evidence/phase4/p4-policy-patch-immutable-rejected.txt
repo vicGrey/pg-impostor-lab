@@ -1,0 +1,2 @@
+$ kubectl patch pg cluster1 -n pg-lab --type='merge' -p '{"spec":{"tls":{"certManagementPolicy":"auto"}}}'
+The PerconaPGCluster "cluster1" is invalid: spec.tls.certManagementPolicy: Invalid value: "auto": certManagementPolicy is immutable

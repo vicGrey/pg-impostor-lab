@@ -1,0 +1,7 @@
+=== Pre-Deletion Root CA Serial ===
+serial=D946968CFA55F1E438D935E42313E667
+
+=== Post-Deletion Reissued Root CA Serial ===
+serial=D0DF64E7400AB544FA95316DD9FF02AC
+
+Result: Deleting the CA Secret caused cert-manager's self-signed issuer to generate a brand new root Certificate Authority keypair with a new serial number.

@@ -42,8 +42,8 @@ fi
 echo "==> Ensuring namespace '${NAMESPACE}' exists..."
 kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
 
-echo "==> Deploying Percona Operator 3.1.0 bundle..."
-kubectl apply -f k8s/base/bundle.yaml -n "${NAMESPACE}"
+echo "==> Deploying Percona Operator 3.1.0 bundle (server-side apply to avoid annotation limits)..."
+kubectl apply --server-side -f k8s/base/bundle.yaml -n "${NAMESPACE}"
 
 echo "==> Waiting for Percona Operator to be ready..."
 kubectl rollout status deployment/percona-postgresql-operator -n "${NAMESPACE}" --timeout=120s
@@ -65,13 +65,12 @@ else
   kubectl apply -f k8s/base/cr-minimal.yaml -n "${NAMESPACE}"
 fi
 
-echo "==> Waiting for PostgreSQL cluster 'cluster1' to be ready..."
-# Wait for pgcluster to reach Ready status or its primary pod to become ready
-echo "Waiting for pods in '${NAMESPACE}' to initialize..."
-kubectl wait --for=condition=Ready pod -l postgres-operator.crunchydata.com/role=master -n "${NAMESPACE}" --timeout=300s || \
-kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=postgres -n "${NAMESPACE}" --timeout=300s || true
-
 echo "========================================================================"
-echo " Cluster deployment initiated for case '${CASE}'!"
-echo " Check status with: kubectl get pg,pods -n ${NAMESPACE}"
+echo " Cluster deployment applied for case '${CASE}'!"
+echo " Live cluster and pod status in '${NAMESPACE}':"
+echo "========================================================================"
+kubectl get pg,pods -n "${NAMESPACE}"
+echo ""
+echo "Note: Database initialization may take 1-2 minutes."
+echo "Watch live progress with: kubectl get pg,pods -n ${NAMESPACE} -w"
 echo "========================================================================"

@@ -44,6 +44,11 @@
 3. **Internal SANs Complete, External/Localhost Excluded (Confirmed):** The operator mints SANs for all 4 in-cluster DNS variants (`short`, `name.ns`, `name.ns.svc`, `FQDN`). However, dialing `host=localhost` via port-forwarding failed with `verify-full`, proving strict hostname enforcement.
 4. **`require` Without Root CA Blindly Connects (Confirmed):** Even with the server-side double lockdown, a client using `sslmode=require` without a root CA connects blindly, remaining susceptible to MITM.
 
+### Outcomes & Experimental Discoveries (Path B: cert-manager)
+1. **cert-manager Does Not Eliminate Namespace Key Storage (Confirmed):** In default `auto` mode, Percona creates an in-namespace self-signed `Issuer` (`cluster1-ca-issuer`) and CA `Issuer` (`cluster1-tls-issuer`). Secret `cluster1-cluster-ca-cert` still contains `tls.key`. The CA key is stored in the namespace, readable by anyone with Secret access.
+2. **Workload SANs & Authority Unchanged (Confirmed):** Both Postgres and PgBouncer are signed by `CN=cluster1-ca` and carry identical SANs covering the 4 in-cluster DNS formats.
+3. **`verify-full` Matrix Identical (Confirmed):** Strict TLS verification behaves identically to Path A—rejecting plaintext, accepting in-cluster FQDN, and refusing `localhost`.
+
 ## Phase 3: Impostor Tests
 
 ### Predictions

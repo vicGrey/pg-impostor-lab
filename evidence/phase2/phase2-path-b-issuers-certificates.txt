@@ -1,0 +1,12 @@
+NAME                                         READY   AGE
+issuer.cert-manager.io/cluster1-ca-issuer    True    2m20s
+issuer.cert-manager.io/cluster1-tls-issuer   True    2m19s
+
+NAME                                                          READY   SECRET                            AGE
+certificate.cert-manager.io/cluster1-cluster-ca-cert          True    cluster1-cluster-ca-cert          2m20s
+certificate.cert-manager.io/cluster1-cluster-cert             True    cluster1-cluster-cert             2m19s
+certificate.cert-manager.io/cluster1-instance1-hz4m-cert      True    cluster1-instance1-hz4m-certs     2m19s
+certificate.cert-manager.io/cluster1-pgbackrest-client-cert   True    cluster1-pgbackrest-client-tls    2m18s
+certificate.cert-manager.io/cluster1-pgbackrest-repo-cert     True    cluster1-pgbackrest-repo-tls      2m18s
+certificate.cert-manager.io/cluster1-pgbouncer-cert           True    cluster1-pgbouncer-frontend-tls   2m18s
+certificate.cert-manager.io/cluster1-replication-cert         True    cluster1-replication-cert         2m19s

@@ -1,0 +1,28 @@
+                      Connection Information
+      Parameter       |                   Value                   
+----------------------+-------------------------------------------
+ Database             | cluster1
+ Client User          | cluster1
+ Host                 | cluster1-primary.pg-lab.svc.cluster.local
+ Host Address         | 127.0.0.1
+ Server Port          | 5434
+ Options              | 
+ Protocol Version     | 3.0
+ Password Used        | true
+ GSSAPI Authenticated | false
+ Backend PID          | 8093
+ SSL Connection       | true
+ SSL Library          | OpenSSL
+ SSL Protocol         | TLSv1.3
+ SSL Key Bits         | 256
+ SSL Cipher           | TLS_AES_256_GCM_SHA384
+ SSL Compression      | false
+ ALPN                 | postgresql
+ Superuser            | off
+ Hot Standby          | off
+(19 rows)
+
+ ssl | version |         cipher         
+-----+---------+------------------------
+ t   | TLSv1.3 | TLS_AES_256_GCM_SHA384
+(1 row)

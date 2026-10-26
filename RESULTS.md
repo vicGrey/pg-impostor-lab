@@ -80,10 +80,10 @@ This phase tested impostors with untrusted CAs or mismatched hostnames. A sophis
 - **Certificate Issuance:** Both the Postgres database instances (`cluster1-cluster-cert`) and PgBouncer instances (`cluster1-pgbouncer`) are signed by the exact same CA.
 - *Evidence:* [phase2-path-a-postgres-cert-sans.txt](evidence/phase2-path-a-postgres-cert-sans.txt), [phase2-path-a-pgbouncer-cert-sans.txt](evidence/phase2-path-a-pgbouncer-cert-sans.txt)
 
-#### 2. CA Key Material Exposure
+#### 2. CA Key Material Stored in Namespace Secret
 - The Secret `cluster1-cluster-ca-cert` contains both `root.crt` AND `root.key`.
-- **Security Impact:** The private signing key is stored in a standard Kubernetes Secret within the database namespace. Anyone with read permissions to Secrets in `pg-lab` can extract the private key and issue trusted certificates.
-- *Evidence:* [phase2-path-a-ca-secret-keys.txt](evidence/phase2-path-a-ca-secret-keys.txt), [phase2-path-a-secrets-list.txt](evidence/phase2-path-a-secrets-list.txt)
+- **Security Impact:** The CA private key is stored in the namespace, readable by anyone with Secret access. Anyone with read permissions to Secrets in `pg-lab` can extract the private key and issue trusted certificates.
+- *Evidence:* [phase2-path-a-ca-secret-keys.txt](evidence/phase2/phase2-path-a-ca-secret-keys.txt), [phase2-path-a-secrets-list.txt](evidence/phase2/phase2-path-a-secrets-list.txt)
 
 #### 3. Plaintext Traffic Rejection
 - **PgBouncer:** Explicitly requires SSL by default; plaintext connections are rejected with `FATAL: SSL required`.
@@ -99,11 +99,11 @@ The operator automatically generates SANs covering all four internal Kubernetes 
 4. Fully Qualified Domain Name (FQDN): `cluster1-pgbouncer.pg-lab.svc.cluster.local` / `cluster1-primary.pg-lab.svc.cluster.local`
 
 All four hostname forms successfully negotiated TLSv1.3 with `sslmode=verify-full`:
-- *Evidence:* [phase2-path-a-pgbouncer-verify-full-short.txt](evidence/phase2-path-a-pgbouncer-verify-full-short.txt), [phase2-path-a-pgbouncer-verify-full-name-ns.txt](evidence/phase2-path-a-pgbouncer-verify-full-name-ns.txt), [phase2-path-a-pgbouncer-verify-full-name-ns-svc.txt](evidence/phase2-path-a-pgbouncer-verify-full-name-ns-svc.txt), [phase2-path-a-pgbouncer-verify-full-fqdn.txt](evidence/phase2-path-a-pgbouncer-verify-full-fqdn.txt), [phase2-path-a-postgres-verify-full-fqdn.txt](evidence/phase2-path-a-postgres-verify-full-fqdn.txt)
+- *Evidence:* [phase2-path-a-pgbouncer-verify-full-short.txt](evidence/phase2/phase2-path-a-pgbouncer-verify-full-short.txt), [phase2-path-a-pgbouncer-verify-full-name-ns.txt](evidence/phase2/phase2-path-a-pgbouncer-verify-full-name-ns.txt), [phase2-path-a-pgbouncer-verify-full-name-ns-svc.txt](evidence/phase2/phase2-path-a-pgbouncer-verify-full-name-ns-svc.txt), [phase2-path-a-pgbouncer-verify-full-fqdn.txt](evidence/phase2/phase2-path-a-pgbouncer-verify-full-fqdn.txt), [phase2-path-a-postgres-verify-full-fqdn.txt](evidence/phase2/phase2-path-a-postgres-verify-full-fqdn.txt)
 
 **Localhost Contrast:**
 When connecting over local port-forwarding using `host=localhost` with `sslmode=verify-full`, libpq evaluated all SANs and rejected the connection due to hostname mismatch (`server certificate does not match host name "localhost"`):
-- *Evidence:* [phase2-path-a-pgbouncer-verify-full-localhost-mismatch.txt](evidence/phase2-path-a-pgbouncer-verify-full-localhost-mismatch.txt), [phase2-path-a-postgres-verify-full-localhost-mismatch.txt](evidence/phase2-path-a-postgres-verify-full-localhost-mismatch.txt)
+- *Evidence:* [phase2-path-a-pgbouncer-verify-full-localhost-mismatch.txt](evidence/phase2/phase2-path-a-pgbouncer-verify-full-localhost-mismatch.txt), [phase2-path-a-postgres-verify-full-localhost-mismatch.txt](evidence/phase2/phase2-path-a-postgres-verify-full-localhost-mismatch.txt)
 
 #### 5. Connection Matrix
 The full 12-row connection matrix was executed against both PgBouncer and Postgres Primary:
@@ -115,7 +115,36 @@ The full 12-row connection matrix was executed against both PgBouncer and Postgr
 - Kubernetes Secrets cannot be mounted across namespaces.
 - Because `cluster1-cluster-ca-cert` bundles `root.key` with `root.crt`, distributing the root CA to client applications in other namespaces forces teams to either copy the private key or abandon verification by defaulting to `sslmode=require`.
 
-### Path B: cert-manager (Pending)
+### Path B: cert-manager
+
+#### 1. Issuer Architecture
+When `cert-manager` is present on the cluster, Percona Operator's `auto` policy automatically creates cert-manager resources:
+- `cluster1-ca-issuer`: An in-namespace `Issuer` with `spec.selfSigned: {}`.
+- `cluster1-tls-issuer`: An in-namespace `Issuer` with `spec.ca.secretName: cluster1-cluster-ca-cert`.
+- *Evidence:* [phase2-path-b-issuers-certificates.txt](evidence/phase2/phase2-path-b-issuers-certificates.txt), [phase2-path-b-issuers-spec.txt](evidence/phase2/phase2-path-b-issuers-spec.txt)
+
+#### 2. CA Key Material Stored in Namespace Secret
+- Inspecting Secret `cluster1-cluster-ca-cert` shows keys: `["ca.crt", "tls.crt", "tls.key"]`.
+- **Architectural Discovery:** Even with `cert-manager` in place, the default Percona integration generates a local, in-namespace CA. Therefore, the CA private key is **stored in the namespace, readable by anyone with Secret access**, presenting the exact same threat model as Path A.
+- *Evidence:* [phase2-path-b-ca-secret-keys.txt](evidence/phase2/phase2-path-b-ca-secret-keys.txt), [phase2-path-b-secrets-list.txt](evidence/phase2/phase2-path-b-secrets-list.txt)
+
+#### 3. Subject Alternative Name (SAN) Grid & Authority
+- Both Postgres primary (`cluster1-cluster-cert`) and PgBouncer (`cluster1-pgbouncer-frontend-tls`) are signed by the same cert-manager CA (`CN=cluster1-ca`).
+- The SANs generated by cert-manager cover the identical four internal Kubernetes DNS variants as Path A.
+- *Evidence:* [phase2-path-b-postgres-cert-sans.txt](evidence/phase2/phase2-path-b-postgres-cert-sans.txt), [phase2-path-b-pgbouncer-cert-sans.txt](evidence/phase2/phase2-path-b-pgbouncer-cert-sans.txt)
+
+#### 4. Hostname Grid & Localhost Contrast
+- Connecting via the cluster FQDN with `sslmode=verify-full` and `civo-ca-path-b.crt` successfully connected over TLSv1.3.
+- Connecting with `host=localhost` failed with:
+  `psql: error: server certificate for "cluster1-pgbouncer.pg-lab.svc.cluster.local" (and 3 other names) does not match host name "localhost"`
+- *Evidence:* [phase2-path-b-pgbouncer-verify-full-fqdn.txt](evidence/phase2/phase2-path-b-pgbouncer-verify-full-fqdn.txt), [phase2-path-b-pgbouncer-verify-full-localhost-mismatch.txt](evidence/phase2/phase2-path-b-pgbouncer-verify-full-localhost-mismatch.txt)
+
+#### 5. Connection Matrix (PgBouncer & Primary)
+The automated 12-row connection matrix was executed against both PgBouncer and Postgres Primary under Path B:
+- `disable` fails on both endpoints (`FATAL: SSL required` on PgBouncer; `FATAL: no pg_hba.conf entry ... no encryption` on Postgres Primary).
+- `require` connects without validating the CA.
+- `verify-full` connects and verifies the endpoint when `civo-ca-path-b.crt` is supplied.
+- *Evidence:* [evidence/phase2/](evidence/phase2/)
 
 ## Phase 3: Impostor Tests (The Correct-Hostname Gap)
 

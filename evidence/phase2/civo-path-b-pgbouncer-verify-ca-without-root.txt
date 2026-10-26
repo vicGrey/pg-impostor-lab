@@ -1,0 +1,2 @@
+psql: error: connection to server at "127.0.0.1", port 5433 failed: root certificate file "/home/viktor/.postgresql/root.crt" does not exist
+Either provide the file, use the system's trusted roots with sslrootcert=system, or change sslmode to disable server certificate verification.

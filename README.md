@@ -8,26 +8,28 @@ When a Postgres client connects over TLS, does it actually check it's talking to
 
 | Component | Pinned Version | Notes |
 |---|---|---|
-| PostgreSQL Server | 18.6 (`postgres:18.6-alpine`) | Official Docker image |
+| PostgreSQL Server (Docker Phase 1) | 18.6 (`postgres:18.6-alpine`) | Official Docker image |
 | Client psql / libpq | 18.6 (`psql (PostgreSQL) 18.6 (Debian 18.6-3)`) | Host client |
 | OpenSSL | `OpenSSL 3.6.3 9 Jun 2026` | Host certificate generator |
-| Percona Operator for PostgreSQL | *Pending Phase 2* | Target: 3.1.0 |
-| cert-manager | *Pending Phase 2* | Kubernetes cert-manager |
-| PgBouncer Image | *Pending Phase 2* | Connection pooler |
-| Civo Kubernetes | *Pending Phase 2* | Cloud K8s cluster |
+| Percona Operator for PostgreSQL | 3.1.0 | Official operator release |
+| Percona PostgreSQL Server (K8s Phase 2) | 18.6 (`percona-distribution-postgresql:18.6.1-1`) | Out-of-the-box 3.1.0 image |
+| PgBouncer Image | `percona-pgbouncer:1.25.2-6` | Official connection pooler |
+| cert-manager | *Pending Phase 2 cluster setup* | Target: latest stable / 1.16+ |
+| Civo Kubernetes | *Pending Phase 2 cluster setup* | Cloud K8s cluster |
 
 ## Deviations from Defaults
 
-1. **`ssl=on` without `hostssl` rule:** The server was started with `ssl=on`, but standard `pg_hba.conf` default rules were left in place (`host` instead of `hostssl`). This demonstrated that configuring certificates does not inherently reject unencrypted connections.
-2. **Pinned to PostgreSQL 18.6:** Pinned to `postgres:18.6-alpine` to match the host client version `psql 18.6` and ensure reproducible image builds.
+1. **`ssl=on` without `hostssl` rule (Phase 1):** The local server was started with `ssl=on`, but standard `pg_hba.conf` default rules were left in place (`host` instead of `hostssl`). This demonstrated that configuring certificates does not inherently reject unencrypted connections.
+2. **Pinned to PostgreSQL 18.6:** Pinned to `postgres:18.6-alpine` locally and `18.6.1-1` on Kubernetes to match host client version `psql 18.6` across both phases.
+3. **Reduced Replicas from 3 to 1 (Phase 2):** In `cr.yaml`, database instance replicas and PgBouncer replicas were reduced from 3 to 1 to fit small Civo cloud nodes and conserve cloud resources. Certificate generation, CA Secrets, SAN entries, and TLS verification mechanics remain identical.
 
 ## How to Reproduce
 
-1. **Generate all certificates:**
+1. **Generate all certificates (Phase 1):**
    ```bash
    ./scripts/gen-certs.sh
    ```
-2. **Start the database container:**
+2. **Start the database container (Phase 1):**
    ```bash
    docker run -d --name postgres-real -p 5432:5432 \
      -e POSTGRES_PASSWORD=postgres -v $(pwd)/docker/certs:/certs:ro \

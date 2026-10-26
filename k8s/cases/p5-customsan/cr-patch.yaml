@@ -1,0 +1,12 @@
+spec:
+  secrets:
+    customRootCATLSSecret:
+      name: custom-ca-secret
+    customTLSSecret:
+      name: custom-cluster-cert
+    customReplicationTLSSecret:
+      name: custom-replication-cert
+  proxy:
+    pgBouncer:
+      customTLSSecret:
+        name: custom-pgbouncer-tls

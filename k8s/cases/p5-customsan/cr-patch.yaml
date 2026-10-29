@@ -1,7 +1,7 @@
 spec:
+  tls:
+    certManagementPolicy: userProvidedOnly
   secrets:
-    customRootCATLSSecret:
-      name: custom-ca-secret
     customTLSSecret:
       name: custom-cluster-cert
     customReplicationTLSSecret:

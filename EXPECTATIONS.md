@@ -71,3 +71,53 @@
 3. **CA Rotation Breaks `verify-full`, Leaves `require` Blindly Connecting (Confirmed):** Rotating the root CA caused `verify-full` connections holding the previous CA to fail with `SSL error: certificate verify failed`, while `sslmode=require` continued connecting over TLSv1.3 without warning.
 
 ## Phase 5: Custom Hostnames and the Fix
+
+### Design
+
+The fix keeps the CA private key entirely off the cluster. The CA is generated locally on the operator's
+laptop, used to sign server and replication certificates, and then discarded from any upload path. Only
+the signed leaf certificates and their keys enter the cluster as Kubernetes Secrets. The operator is
+configured with `certManagementPolicy: userProvidedOnly` at cluster creation time so it never creates
+its own CA alongside the user-supplied certificates.
+
+### Predictions Made Before Running
+
+**1. Custom SANs — `verify-full` with non-default hostnames**
+- **Prediction:** A client dialing `host=localhost` via port-forward with `sslmode=verify-full` and the
+  custom CA will **connect successfully**. Under Phases 2–4 this always failed because `localhost` was
+  not in the operator-generated SANs. With user-supplied certs that explicitly include `localhost` and
+  `127.0.0.1`, `verify-full` should pass the SAN check.
+- **Prediction:** Dialing `host=postgres.custom.local hostaddr=127.0.0.1` with `sslmode=verify-full`
+  will also **connect successfully**, proving that arbitrary custom domains can be injected via
+  user-provided certs.
+- **Prediction:** The standard in-cluster FQDNs (`cluster1-pgbouncer.pg-lab.svc.cluster.local`, etc.)
+  will continue to pass `verify-full` as before.
+
+**2. `certManagementPolicy: userProvidedOnly` at creation**
+- **Prediction:** Setting this at cluster creation (rather than patching it live as in Phase 4) will
+  succeed without any CEL immutability error.
+- **Prediction (uncertain):** The operator may still attempt to read a root CA Secret even under
+  `userProvidedOnly`. If it does, it will error during reconciliation. We will test whether supplying
+  a Secret containing only `root.crt` (no private key) satisfies it.
+
+**3. Replication with user-supplied certs**
+- **Prediction:** Replication will function correctly because the custom replication cert uses
+  `CN=_crunchyrepl`, which matches what Percona's `pg_hba.conf` `cert` auth rule expects. If
+  the CN is wrong, replication will fail at the authentication step.
+
+**4. Phase 3 re-run against the fixed setup (the proof)**
+- **Prediction:** Reading every Secret in `pg-lab` will yield no CA private key. There will be
+  no `root.key`, no `ca.key`, and no equivalent field in any Secret that could be used to mint
+  a new trusted certificate.
+- **Prediction:** An attempt to repeat the Phase 3 impostor attack (forge a cert for
+  `cluster1-primary.pg-lab.svc.cluster.local`) will fail because the attacker has no CA key to
+  sign with. Any self-signed cert they produce will be rejected by a client using
+  `sslmode=verify-full` with the custom CA.
+
+**5. Residual risk**
+- **Prediction:** The leaf private keys (`tls.key` inside `custom-cluster-cert`,
+  `custom-replication-cert`, and `custom-pgbouncer-tls`) will still be visible in the namespace
+  to anyone with Secret read access. This is unavoidable with Kubernetes Secrets as the delivery
+  mechanism. A Secret reader could therefore impersonate the specific server until the cert expires,
+  but cannot mint new identities — a categorically smaller blast radius than CA key exposure.
+

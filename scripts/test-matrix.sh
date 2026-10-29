@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # scripts/test-matrix.sh
 # Automates the SSL connection matrix for a target PostgreSQL endpoint.
-# Usage: ./scripts/test-matrix.sh <label> <host> <port> <ca_cert_path> [hostaddr]
+# Usage: ./scripts/test-matrix.sh <label> <host> <port> <ca_cert_path> [hostaddr] [evidence_dir]
 
 set -u
 
@@ -10,14 +10,18 @@ HOST="${2:-localhost}"
 PORT="${3:-5432}"
 CA_FILE="${4:-docker/certs/ca-a.crt}"
 HOSTADDR="${5:-}"
+EVIDENCE_DIR_ARG="${6:-}"
 
 DB_USER="${PGUSER:-postgres}"
 DB_NAME="${PGDATABASE:-postgres}"
 DB_PASS="${PGPASSWORD:-postgres}"
 
-EVIDENCE_DIR="evidence/phase1"
-if [[ "${LABEL}" =~ (phase2|civo) ]]; then
+if [ -n "${EVIDENCE_DIR_ARG}" ]; then
+  EVIDENCE_DIR="${EVIDENCE_DIR_ARG}"
+elif [[ "${LABEL}" =~ (phase2|civo) ]]; then
   EVIDENCE_DIR="evidence/phase2"
+else
+  EVIDENCE_DIR="evidence/phase1"
 fi
 mkdir -p "${EVIDENCE_DIR}"
 

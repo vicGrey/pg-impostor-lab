@@ -1,0 +1,4 @@
+=== PgBouncer Server Cert Issuer ===
+issuer=CN=Custom-Enterprise-Root-CA
+=== Operator CA Secret Issuer ===
+issuer=CN=postgres-operator-ca

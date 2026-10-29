@@ -42,7 +42,7 @@ if [ -n "${CIVO_CLUSTER}" ]; then
   echo
   if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo "==> Deleting Civo cluster '${CIVO_CLUSTER}'..."
-    civo k8s delete "${CIVO_CLUSTER}" -y --region "${REGION}" || true
+    civo k8s delete "${CIVO_CLUSTER}" -y || true
     echo "==> Waiting 10s for cluster teardown..."
     sleep 10
     

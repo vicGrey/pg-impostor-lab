@@ -1,6 +1,4 @@
 spec:
-  tls:
-    certManagementPolicy: userProvidedOnly
   secrets:
     customTLSSecret:
       name: custom-cluster-cert

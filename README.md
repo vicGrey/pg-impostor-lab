@@ -1,8 +1,20 @@
 # PostgreSQL TLS Identity Verification Lab
 
+[![GitHub stars](https://img.shields.io/github/stars/vicGrey/pg-impostor-lab?style=social)](https://github.com/vicGrey/pg-impostor-lab)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+
 ## Research Question
 
-When a Postgres client connects over TLS, does it actually check it's talking to the right server? What happens under default configurations of the Percona Operator for PostgreSQL 3.1.0 on Kubernetes, what risks arise (impostor servers, CA private key exposure, SAN mismatches), how do certificate policies and lifecycles behave, and what configuration enables strict `verify-full` security?
+When a PostgreSQL client connects over TLS, does it actually check that it is communicating with the intended server? What happens under default configurations of the Percona Operator for PostgreSQL 3.1.0 on Kubernetes, what security risks arise (impostor servers, CA private key exposure, Subject Alternative Name mismatches), how do certificate policies and rotation lifecycles behave, and what architecture is required to enable strict, production-grade `verify-full` security?
+
+---
+
+## Quick Navigation
+
+- [📊 Complete Experimental Results & Matrix (`RESULTS.md`)](RESULTS.md)
+- [🎯 Pre-Registered Hypotheses & Predictions (`EXPECTATIONS.md`)](EXPECTATIONS.md)
+- [📁 Raw Terminal Evidence Files (`evidence/`)](evidence/)
+- [🛠️ Automation & Reproduction Scripts (`scripts/`)](scripts/)
 
 ---
 
@@ -18,6 +30,17 @@ When a Postgres client connects over TLS, does it actually check it's talking to
 | PgBouncer Image | `percona-pgbouncer:1.25.2-6` | Official connection pooler |
 | cert-manager | `v1.16.2` | Official cert-manager release |
 | Civo Kubernetes | `v1.35.0+k3s1` | 2 nodes (`g4s.kube.medium`, nyc1) |
+
+---
+
+## Prerequisites for Reproduction
+
+To run the experiments locally or on Kubernetes, you will need:
+- **Docker Engine** (v24+)
+- **PostgreSQL Client Tools** (`psql` v14+, tested on 18.6)
+- **OpenSSL** (v3.0+)
+- **Kubectl** (v1.28+)
+- **Civo CLI** (Optional, only needed if replicating cloud Kubernetes phases on Civo)
 
 ---
 
@@ -68,11 +91,19 @@ kubectl port-forward svc/cluster1-pgbouncer 5433:5432 -n pg-lab &
 kubectl get secret cluster1-cluster-ca-cert -n pg-lab -o jsonpath='{.data.root\.crt}' | base64 -d > civo-ca.crt
 export PGPASSWORD=$(kubectl get secret cluster1-pguser-cluster1 -n pg-lab -o jsonpath='{.data.password}' | base64 -d)
 PGUSER=cluster1 PGDATABASE=cluster1 ./scripts/test-matrix.sh civo-path-a-pgbouncer localhost 5433 civo-ca.crt 127.0.0.1 evidence/phase2
+
+# (Optional) Deploy Path B with cert-manager
+./scripts/up.sh p2-cert-manager pg-lab
 ```
 
 ---
 
 ### Phase 3: The Impostor Attack
+You can run the fully automated replay script:
+```bash
+./k8s/cases/p3-impostor/attack.sh pg-lab
+```
+Or run the steps manually:
 ```bash
 # 1. Extract CA private key from Kubernetes namespace Secret
 kubectl get secret cluster1-cluster-ca-cert -n pg-lab -o jsonpath='{.data.root\.key}' | base64 -d > stolen.key
@@ -91,6 +122,14 @@ docker run -d --rm --name pg-impostor -p 5435:5432 -e POSTGRES_PASSWORD=cluster1
 # 4. Connect with strict verify-full (proves client is fooled)
 PGPASSWORD=cluster1 psql "host=localhost port=5435 user=postgres dbname=postgres sslmode=verify-full sslrootcert=stolen.crt" -c "\conninfo"
 ```
+
+---
+
+### Phase 4: Certificate Policy & Rotation Tests
+Automated replay scripts are provided in `k8s/cases/`:
+- **Leaf Secret Auto-Healing:** `./k8s/cases/p4-delete-leaf-secret/run.sh pg-lab`
+- **Root CA Rotation Impact:** `./k8s/cases/p4-delete-ca-secret/run.sh pg-lab`
+- **CEL Immutability Enforcement & Recovery:** `./k8s/cases/p4-policy-change-live/run.sh pg-lab`
 
 ---
 

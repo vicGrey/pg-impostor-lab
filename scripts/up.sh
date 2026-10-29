@@ -57,7 +57,7 @@ fi
 # 4. Apply database cluster manifest (with patch if present)
 if [ -s "${CASE_DIR}/cr-patch.yaml" ]; then
   echo "==> Applying cr-minimal.yaml with patch from ${CASE_DIR}/cr-patch.yaml..."
-  kubectl patch --dry-run=client -o yaml --local \
+  kubectl patch --dry-run=client -o yaml --local --type merge \
     -f k8s/base/cr-minimal.yaml \
     --patch-file "${CASE_DIR}/cr-patch.yaml" | kubectl apply -f - -n "${NAMESPACE}"
 else

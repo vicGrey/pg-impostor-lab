@@ -121,3 +121,23 @@ its own CA alongside the user-supplied certificates.
   mechanism. A Secret reader could therefore impersonate the specific server until the cert expires,
   but cannot mint new identities — a categorically smaller blast radius than CA key exposure.
 
+### Outcomes & Experimental Confirmation
+
+1. **Custom SANs Fixed `verify-full` on `localhost` and Custom Domain (Confirmed):**
+   - Connecting via `host=localhost` with `sslmode=verify-full` successfully established an encrypted TLSv1.3 session (previously rejected in Phase 2).
+   - Connecting via `host=postgres.custom.local` with `sslmode=verify-full` also succeeded, proving arbitrary SAN injection works.
+
+2. **The `userProvidedOnly` Discovery (Confirmed & Deepened):**
+   - Setting `userProvidedOnly` at creation succeeded at the API server level (no CEL validation error), but the operator paused reconciliation with `Missing user-provided TLS secrets: cluster1-cluster-ca-cert, cluster1-pgbackrest`.
+   - Source code analysis of `internal/controller/postgrescluster/pki.go:219` revealed that the operator explicitly parses `root.PrivateKey` even under `userProvidedOnly`. Thus, Percona does not support an offline root CA unless backed by an external cert-manager `ClusterIssuer`.
+   - Defaulting to `auto` while specifying `customTLSSecret` and `customReplicationTLSSecret` successfully loaded custom SAN certificates while allowing the operator to self-manage background helper components.
+
+3. **Replication Functionality (Confirmed):**
+   - Provisioning the replication certificate with `CN=_crunchyrepl` and `clientAuth` allowed Patroni to initialize and report healthy `Leader` status.
+
+4. **Phase 3 Impostor Attack Neutralized (Confirmed):**
+   - An attacker extracting the in-cluster operator CA key was able to mint an impostor server certificate, but connections from clients trusting `custom-ca.crt` were immediately rejected with `SSL error: certificate verify failed`.
+   - Because the enterprise CA private key was never stored on the cluster, the attacker had zero signing authority with the client.
+
+5. **Residual Risk Verified (Confirmed):**
+   - Leaf private keys remain accessible in the namespace to users with Secret read access, allowing potential impersonation of that specific instance until certificate expiry, but eliminating arbitrary identity minting across the organization.

@@ -211,3 +211,108 @@ Once the leaf certificate was reissued under the new CA:
   *Evidence:* [p4-ca-rotation-require-blindly-connects.txt](evidence/phase4/p4-ca-rotation-require-blindly-connects.txt)
 
 ## Phase 5: Custom Hostnames and the Fix
+
+### 1. Upstream Issue #1811 & The Custom SAN Limitation
+- **Upstream Problem:** In Percona Operator for PostgreSQL, issue [#1811](https://github.com/percona/percona-postgresql-operator/issues/1811) tracks the feature request: *"Allow user-defined SANs in operator-generated TLS certificates via `spec.tls.SANs`"*.
+- **The Core Problem:** The operator's built-in certificate generator hardcodes SANs strictly to the four internal Kubernetes service names (`<cluster>`, `<cluster>.<ns>`, `<cluster>.<ns>.svc`, and `<cluster>.<ns>.svc.cluster.local`). Any external DNS record, corporate domain (e.g. `postgres.custom.local`), ingress host, or local developer tunnel (`localhost`) triggers a fatal hostname mismatch under `sslmode=verify-full`.
+- **The Only Architectural Workaround:** Supplying user-managed TLS secrets via `spec.secrets.customTLSSecret`, `customReplicationTLSSecret`, and `proxy.pgBouncer.customTLSSecret`.
+
+### 2. Code-Level Discovery: The `userProvidedOnly` CA Key Trap
+When deploying custom certificates, an architect might reasonably expect `certManagementPolicy: userProvidedOnly` to allow an entirely offline CA where no CA private key is ever placed in Kubernetes.
+
+Our live experiment and source code inspection of Percona Operator 3.1.0 ([`internal/controller/postgrescluster/pki.go:210-225`](https://github.com/percona/percona-postgresql-operator/blob/v3.1.0/internal/controller/postgrescluster/pki.go#L210-L225)) proved this assumption is **false**:
+
+1. **Reconciliation Block:** Setting `certManagementPolicy: userProvidedOnly` caused the operator to immediately pause reconciliation with:
+   `Missing user-provided TLS secrets: cluster1-cluster-ca-cert, cluster1-pgbackrest. certManagementPolicy is userProvidedOnly (TLSSecretsMissing)`
+2. **Go Code Mandates Private Key:** In `pki.go` line 219:
+   ```go
+   if policy == v1beta1.CertManagementUserProvidedOnly {
+       root := &pki.RootCertificateAuthority{}
+       ...
+       if err := root.PrivateKey.UnmarshalText(existing.Data[privateKey]); err != nil {
+           return nil, errors.Wrapf(err, "parse private key in user-provided root CA secret %q", existing.Name)
+       }
+   ```
+   The operator's reconciler **explicitly parses `root.PrivateKey` (`root.key`) from Kubernetes Secret storage**, even under `userProvidedOnly`!
+3. **The Working Architecture:** Setting policy to `auto` (the default) while supplying `customTLSSecret`, `customReplicationTLSSecret`, and `proxy.pgBouncer.customTLSSecret` allows the operator to load the enterprise custom SAN certificates for all client-facing traffic while self-managing internal background helper certificates.
+
+### 3. Subject Alternative Name (SAN) Verification
+Certificates were generated with an enterprise root (`Custom-Enterprise-Root-CA`) and custom SANs:
+`DNS:cluster1-primary.pg-lab.svc.cluster.local, ..., DNS:postgres.custom.local, DNS:localhost, IP Address:127.0.0.1`
+- *Evidence:* [phase5-custom-pgbouncer-sans.txt](evidence/phase5/phase5-custom-pgbouncer-sans.txt)
+
+#### Connection Test Results under `verify-full`:
+1. **Localhost Port-Forward (`host=localhost`):**
+   - In Phase 2: **REFUSED** (`server certificate does not match host name "localhost"`).
+   - In Phase 5: **CONNECTED** over TLSv1.3 with 256-bit encryption.
+   - *Evidence:* [phase5-pgbouncer-verify-full-localhost.txt](evidence/phase5/phase5-pgbouncer-verify-full-localhost.txt)
+2. **Arbitrary Custom Domain (`host=postgres.custom.local hostaddr=127.0.0.1`):**
+   - In Phase 5: **CONNECTED** over TLSv1.3 with 256-bit encryption.
+   - *Evidence:* [phase5-pgbouncer-verify-full-custom-domain.txt](evidence/phase5/phase5-pgbouncer-verify-full-custom-domain.txt)
+
+### 4. Full 12-Row Connection Matrix (PgBouncer)
+Testing against `localhost` on forwarded port 5433 with `custom-ca.crt`:
+
+| SSL Mode | Root CA Config | Status | Details / Cipher |
+| :--- | :--- | :--- | :--- |
+| `disable` | without-root | **REFUSED** | `FATAL: SSL required` (server lockdown) |
+| `disable` | with-root | **REFUSED** | `FATAL: SSL required` (server lockdown) |
+| `allow` | without-root | **CONNECTED** | Fallback to TLSv1.3 |
+| `allow` | with-root | **CONNECTED** | Fallback to TLSv1.3 |
+| `prefer` | without-root | **CONNECTED** | TLSv1.3 |
+| `prefer` | with-root | **CONNECTED** | TLSv1.3 |
+| `require` | without-root | **CONNECTED** | TLSv1.3 (unauthenticated) |
+| `require` | with-root | **CONNECTED** | TLSv1.3 (authenticated) |
+| `verify-ca` | without-root | **REFUSED** | `root certificate file ... does not exist` |
+| `verify-ca` | with-root | **CONNECTED** | TLSv1.3 (CA verified) |
+| `verify-full` | without-root | **REFUSED** | `root certificate file ... does not exist` |
+| `verify-full` | with-root | **CONNECTED** | **TLSv1.3 (Identity & SAN fully verified!)** |
+
+- *Evidence:* [evidence/phase5/](evidence/phase5/)
+
+### 5. Replication Health
+The custom replication certificate was provisioned with `CN=_crunchyrepl` and `extendedKeyUsage = clientAuth`.
+- Querying Patroni confirmed node `cluster1-instance1-r55k-0` is healthy and active:
+  `Role: Leader | State: running | TL: 1`
+- *Evidence:* [phase5-patroni-status.txt](evidence/phase5/phase5-patroni-status.txt)
+
+### 6. The Proof: Re-Running the Phase 3 Impostor Attack
+To prove that our enterprise fix completely eliminates the vulnerability demonstrated in Phase 3:
+1. **The Attack:** An attacker with Kubernetes Secret read access in `pg-lab` extracted the in-cluster CA private key from `cluster1-cluster-ca-cert` (`CN=postgres-operator-ca`).
+2. **The Forgery:** Minted an impostor certificate stamped with the cluster primary SANs.
+3. **The Target Server:** Deployed a rogue PostgreSQL instance serving the forged certificate on port 5435.
+4. **The Client Connection:** The client attempted connection using `sslmode=verify-full sslrootcert=custom-ca.crt`.
+
+**Result: REJECTED & BLOCKED!**
+`psql: error: connection to server at "localhost" (::1), port 5435 failed: SSL error: certificate verify failed`
+- *Evidence:* [phase5-impostor-attack-blocked.txt](evidence/phase5/phase5-impostor-attack-blocked.txt)
+
+#### Why it was blocked:
+In Phase 3, the client trusted the operator's in-namespace CA, so an attacker holding the in-namespace key succeeded.
+In Phase 5, the client trusts the enterprise root CA (`Custom-Enterprise-Root-CA`). Because that master private key was kept entirely off the cluster and never stored in Kubernetes, the attacker's stolen namespace key had zero signing authority with the client.
+
+### 7. Residual Risk Analysis
+- **What is eliminated:** Unlimited, arbitrary identity minting. An attacker with Kubernetes Secret read access can no longer forge new server or service identities.
+- **What remains:** Leaf private key theft. Because Kubernetes Secret objects deliver `custom-cluster-cert` (`tls.key`) to database pods, an attacker with namespace Secret read access can still steal the server's own private key. With that key, they can impersonate *that specific server* until the leaf certificate expires.
+- **Mitigation:** Enforce short certificate lifespans (30–90 days) and restrict RBAC access to Secrets.
+
+---
+
+## Conclusions & Architectural Recommendations
+
+1. **Always Enforce `sslmode=verify-full` in Applications:**
+   - `sslmode=require` encrypts wire traffic but blindly accepts any certificate presented by a rogue server or man-in-the-middle attacker.
+   - `sslmode=verify-ca` validates the issuer but fails completely if an attacker presents another certificate signed by the same trusted CA (demonstrated in Phase 1).
+   - Only `verify-full` validates cryptographic authenticity AND server identity.
+
+2. **Never Treat In-Namespace CA Secrets as Secure Signing Authorities:**
+   - Both Percona's built-in PKI (Path A) and default cert-manager integration (Path B) store the root CA private key (`root.key` / `tls.key`) inside the database namespace.
+   - Any compromised workload or user with `get secrets` permissions in that namespace can extract the key and mint fully trusted identities (demonstrated in Phase 3).
+
+3. **Externalize Certificate Authority with cert-manager ClusterIssuers:**
+   - In production, do not rely on local `Issuer` resources or in-namespace self-signed CAs.
+   - Back cert-manager with a centralized `ClusterIssuer` (e.g. HashiCorp Vault, AWS Private CA, or a dedicated, locked-down PKI namespace) so that CA private keys never touch workload namespaces.
+
+4. **Cross-Namespace CA Distribution:**
+   - Applications running in other namespaces should only receive the public CA certificate (`ca.crt`), never the combined secret containing `root.key`.
+   - Use tools like `trust-manager` or ConfigMap reflection to automatically distribute public trust bundles across application namespaces.

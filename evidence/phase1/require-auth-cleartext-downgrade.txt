@@ -1,0 +1,1 @@
+psql: error: connection to server at "localhost" (::1), port 5432 failed: authentication method requirement "scram-sha-256" failed: server requested a cleartext password

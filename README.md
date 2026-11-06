@@ -67,10 +67,12 @@ To run the experiments locally or on Kubernetes, you will need:
 ./scripts/gen-certs.sh
 
 # 2. Run real database container
-docker run -d --name postgres-real -p 5432:5432 \
-  -e POSTGRES_PASSWORD=postgres -v $(pwd)/docker/certs:/certs:ro \
+docker run -d --name postgres-real -p 127.0.0.1:5432:5432 -p '[::1]:5432:5432' \
+  -e POSTGRES_PASSWORD=postgres \
+  -v "$(pwd)/docker/certs/server-real.crt:/certs/server.crt:ro" \
+  -v "$(pwd)/docker/certs/server-real.key:/certs/server.key:ro" \
   postgres:18.6-alpine \
-  sh -c "cp /certs/server-real.crt /tmp/server.crt && cp /certs/server-real.key /tmp/server.key && chown postgres:postgres /tmp/server.* && chmod 600 /tmp/server.key && exec docker-entrypoint.sh postgres -c ssl=on -c ssl_cert_file=/tmp/server.crt -c ssl_key_file=/tmp/server.key"
+  sh -c "cp /certs/server.key /tmp/server.key && chown postgres:postgres /tmp/server.key && chmod 600 /tmp/server.key && exec docker-entrypoint.sh postgres -c ssl=on -c ssl_cert_file=/certs/server.crt -c ssl_key_file=/tmp/server.key"
 
 # 3. Run automated connection matrix
 ./scripts/test-matrix.sh real localhost 5432 docker/certs/ca-a.crt

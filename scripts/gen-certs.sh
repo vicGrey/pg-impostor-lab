@@ -69,20 +69,19 @@ openssl x509 -req \
   -copy_extensions copy
 
 echo "==> 6. Generating Impostor 3: Same-CA with Wrong Hostname (Signed by CA-A)..."
-openssl req -new -newkey rsa:2048 -nodes \
+openssl req -newkey rsa:2048 -nodes \
   -keyout "${CERTS_DIR}/server-impostor-sameca.key" \
+  -out "${CERTS_DIR}/server-impostor-sameca.csr" \
   -subj "/CN=postgres-wrong" \
-  -out "${CERTS_DIR}/server-impostor-sameca.csr"
+  -addext "subjectAltName=DNS:postgres-wrong"
 
-echo "subjectAltName=DNS:postgres-wrong" > "${CERTS_DIR}/sameca.ext"
 openssl x509 -req \
   -in "${CERTS_DIR}/server-impostor-sameca.csr" \
   -CA "${CERTS_DIR}/ca-a.crt" \
   -CAkey "${CERTS_DIR}/ca-a.key" \
   -CAcreateserial \
-  -days 30 -sha256 \
-  -extfile "${CERTS_DIR}/sameca.ext" \
-  -out "${CERTS_DIR}/server-impostor-sameca.crt"
-rm -f "${CERTS_DIR}/sameca.ext"
+  -out "${CERTS_DIR}/server-impostor-sameca.crt" \
+  -days 365 \
+  -copy_extensions copy
 
 echo "==> All Phase 1 certificates successfully generated in ${CERTS_DIR}!"

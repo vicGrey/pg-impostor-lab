@@ -1,0 +1,1 @@
+psql: error: weak sslmode "require" may not be used with sslrootcert=system (use "verify-full")
